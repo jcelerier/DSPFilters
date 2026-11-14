@@ -96,6 +96,9 @@ void AnalogLowPass::design (int numPoles,
 //
 
 AnalogLowShelf::AnalogLowShelf ()
+  : m_numPoles (-1)
+  , m_rippleDb (0)
+  , m_gainDb (0)
 {
   setNormal (doublePi, 1);
 }
@@ -121,16 +124,22 @@ void AnalogLowShelf::design (int numPoles,
     if (gainDb<0)
       rippleDb = -rippleDb;
 
-    const double G  = std::pow (10., gainDb / 20.0 );
-    const double Gb = std::pow (10., (gainDb - rippleDb) / 20.0);
-    const double G0 = 1;
-    const double g0 = pow (G0 , 1. / numPoles);
+    const double logScale = std::log (10.) / 20.;
+    const double logG = gainDb * logScale;
+    const double logRipple = rippleDb * logScale;
+    const double logGb = logG - logRipple;
+    const double G = std::exp (logG);
+    const double Gb = std::exp (logGb);
+    const double g0 = 1;
 
     double eps;
-    if (Gb != G0 )
-      eps = sqrt((G*G-Gb*Gb)/(Gb*Gb-G0*G0));
+    if (gainDb != rippleDb)
+      // Avoid subtracting nearly equal gains: a tiny nonzero ripple or gain
+      // otherwise rounds the differences to zero and produces NaN poles.
+      eps = std::sqrt (std::exp (2 * logGb) * std::expm1 (2 * logRipple)
+                       / std::expm1 (2 * logGb));
     else
-      eps = G-1; // This is surely wrong
+      eps = G-1;
 
     const double b = pow (G/eps+Gb*sqrt(1+1/(eps*eps)), 1./numPoles);
     const double u = log (b / g0);
